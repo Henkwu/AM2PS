@@ -2,7 +2,6 @@
 
 Reference PyTorch implementation accompanying the manuscript **“Adaptive Multi-Prompt and Multi-Scale Feature Fusion for Pneumonia Diagnosis.”**
 
-> **Important reproducibility statement.** This repository is reconstructed from the manuscript rather than recovered from the authors' original experimental source code. It implements the architecture and training pipeline described in the paper and exposes every manuscript-ambiguous choice in configuration. It should therefore be described as a *reference reimplementation*. Exact recovery of the published numbers cannot be guaranteed until the omitted implementation details and the two equation-level ambiguities listed in `PAPER_IMPLEMENTATION_NOTES.md` are resolved.
 
 ## 1. What is implemented
 
