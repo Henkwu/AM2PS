@@ -292,14 +292,3 @@ for seed in 1 2 3 4 5; do
   python train.py --config /tmp/am2ps_${seed}.yaml --output outputs/seed_${seed} --device cuda
 done
 ```
-
-## 15. GitHub publication checklist
-
-Before publishing this package to GitHub:
-
-- add the manuscript DOI once available;
-- confirm the final method name (AM2PS) and title;
-- state clearly that this is the authors' official code only if the authors have verified this reconstructed implementation;
-- replace the implementation-choice defaults if original experimental values become available;
-- run all experiments and commit only measured results, never manuscript target values as generated outputs;
-- add dataset licenses/links rather than redistributing medical images.
