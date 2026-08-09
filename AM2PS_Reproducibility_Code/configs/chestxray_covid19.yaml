@@ -1,0 +1,49 @@
+seed: 42
+output_dir: outputs/chestxray_covid19_full
+
+data:
+  root: data/ChestXRay-Covid19
+  train_dir: train
+  val_dir: val        # if absent, code deterministically creates 10% validation from training data
+  test_dir: test
+  val_fraction: 0.10  # implementation choice because the paper reports only train/test for this dataset
+  image_size: 224
+  rotation_degrees: 10.0
+  color_jitter: 0.10
+
+loader:
+  batch_size: 16
+  num_workers: 4
+  pin_memory: true
+
+components:
+  data_augmentation: true
+  multi_prompt: true
+  multi_scale: true
+  scalable_adapter: true
+
+model:
+  embed_dim: 512
+  resnet_pretrained: true
+  clip_backend: open_clip
+  clip_model: ViT-B-32
+  clip_pretrained: openai
+  adapter_hidden_dim: 256
+  num_scales: 3
+  transformer_layers: 3
+  num_heads: 8
+  alpha: [0.3333333333, 0.3333333333, 0.3333333333]
+  lambda1: 1.0
+  lambda2: 1.0
+  inter_modal_mode: mean_class_probs
+  normalize_probability_fusion: true
+  prompts:
+    - "a photo of a {class}"
+    - "a clinical photo of a {class}"
+    - "a chest X-ray photo of a {class}"
+
+training:
+  epochs: 60
+  lr: 0.0002
+  weight_decay: 0.0001
+  amp: true

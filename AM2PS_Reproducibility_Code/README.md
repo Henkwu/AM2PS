@@ -1,0 +1,305 @@
+# AM2PS: Adaptive Multi-Prompt and Multi-Scale Feature Fusion for Pneumonia Diagnosis
+
+Reference PyTorch implementation accompanying the manuscript **“Adaptive Multi-Prompt and Multi-Scale Feature Fusion for Pneumonia Diagnosis.”**
+
+> **Important reproducibility statement.** This repository is reconstructed from the manuscript rather than recovered from the authors' original experimental source code. It implements the architecture and training pipeline described in the paper and exposes every manuscript-ambiguous choice in configuration. It should therefore be described as a *reference reimplementation*. Exact recovery of the published numbers cannot be guaranteed until the omitted implementation details and the two equation-level ambiguities listed in `PAPER_IMPLEMENTATION_NOTES.md` are resolved.
+
+## 1. What is implemented
+
+- Pretrained **ResNet50** task-specific visual backbone.
+- Frozen **CLIP ViT-B/32** visual and text encoders.
+- Three-prompt representation:
+  - `a photo of a {class}`
+  - `a clinical photo of a {class}`
+  - `a chest X-ray photo of a {class}`
+- Multi-prompt inter-modal probability fusion.
+- Two-layer scalable adapter with ReLU and residual enhancement.
+- Three-scale visual fusion with dimensions reduced by factors of two.
+- Three cross-fusion Transformer layers per scale.
+- Weighted inter-/intra-modal probability fusion.
+- Adam + cosine annealing training.
+- Accuracy, Precision, Recall, F1, and AUC evaluation.
+- Ablation, prompt, scale/layer, and lambda sweeps corresponding to the manuscript analyses.
+
+## 2. Repository structure
+
+```text
+AM2PS_Reproducibility_Code/
+├── am2ps/
+│   ├── config.py
+│   ├── data.py
+│   ├── engine.py
+│   ├── metrics.py
+│   ├── model.py
+│   ├── prompts.py
+│   └── utils.py
+├── configs/
+│   ├── chestxray2017.yaml
+│   └── chestxray_covid19.yaml
+├── experiments/
+│   ├── collect_results.py
+│   ├── run_ablation.py
+│   ├── run_lambda_sweep.py
+│   ├── run_prompt_sweep.py
+│   └── run_scale_layer_sweep.py
+├── scripts/
+│   └── validate_dataset.py
+├── tests/
+│   └── smoke_test.py
+├── train.py
+├── evaluate.py
+├── paper_targets.json
+├── PAPER_IMPLEMENTATION_NOTES.md
+├── requirements.txt
+└── pyproject.toml
+```
+
+## 3. Environment
+
+The manuscript reports PyTorch on Ubuntu 20.04.5 LTS with an NVIDIA 1080Ti GPU and 128 GB system memory. The reference package also runs on newer CUDA GPUs; CPU execution is supported for smoke tests but is impractical for full training.
+
+Recommended setup:
+
+```bash
+conda create -n am2ps python=3.10 -y
+conda activate am2ps
+pip install -r requirements.txt
+pip install -e .
+```
+
+The first real CLIP run downloads the OpenAI ViT-B/32 weights through `open_clip_torch`, so internet access is required once unless the weights are already cached.
+
+## 4. Prepare datasets
+
+### 4.1 ChestXRay2017
+
+The manuscript reports 5,856 images with the following split:
+
+- train: 3,875 pneumonia + 1,341 normal
+- val: 8 pneumonia + 8 normal
+- test: 390 pneumonia + 234 normal
+
+Expected layout:
+
+```text
+data/ChestXRay2017/chest_xray/
+├── train/
+│   ├── NORMAL/
+│   └── PNEUMONIA/
+├── val/
+│   ├── NORMAL/
+│   └── PNEUMONIA/
+└── test/
+    ├── NORMAL/
+    └── PNEUMONIA/
+```
+
+### 4.2 ChestXRay-Covid19
+
+The manuscript reports 6,432 images and an 80/20 train/test split:
+
+- train: 3,418 pneumonia + 1,266 normal + 460 COVID-19
+- test: 855 pneumonia + 317 normal + 116 COVID-19
+
+Expected layout:
+
+```text
+data/ChestXRay-Covid19/
+├── train/
+│   ├── COVID19/
+│   ├── NORMAL/
+│   └── PNEUMONIA/
+└── test/
+    ├── COVID19/
+    ├── NORMAL/
+    └── PNEUMONIA/
+```
+
+The paper does not report a separate validation split for this dataset. The reference code therefore creates a deterministic 10% validation subset from the training split unless a `val/` directory is supplied. This avoids tuning on the test set.
+
+Validate the directory structure and sample counts:
+
+```bash
+python scripts/validate_dataset.py data/ChestXRay2017/chest_xray
+python scripts/validate_dataset.py data/ChestXRay-Covid19
+```
+
+## 5. Run an offline smoke test first
+
+This verifies tensor shapes, fusion, backpropagation, and probability normalization without downloading CLIP weights or loading a dataset:
+
+```bash
+python tests/smoke_test.py
+```
+
+Expected final line:
+
+```text
+SMOKE TEST PASSED
+```
+
+## 6. Train the full AM2PS model
+
+### Binary ChestXRay2017
+
+```bash
+python train.py --config configs/chestxray2017.yaml --device cuda
+```
+
+Outputs are written to:
+
+```text
+outputs/chestxray2017_full/
+├── best.pt
+├── model_info.json
+├── resolved_config.json
+├── training_summary.json
+└── test_metrics.json
+```
+
+### Three-class ChestXRay-Covid19
+
+```bash
+python train.py --config configs/chestxray_covid19.yaml --device cuda
+```
+
+The key paper-reported reference accuracies are **95.65%** for ChestXRay2017 and **97.21%** for ChestXRay-Covid19. Treat these as targets from the manuscript, not as numbers generated by this repository. See `paper_targets.json`.
+
+## 7. Evaluate a trained checkpoint
+
+```bash
+python evaluate.py \
+  --config configs/chestxray2017.yaml \
+  --checkpoint outputs/chestxray2017_full/best.pt \
+  --device cuda \
+  --save outputs/chestxray2017_full/re_eval.json
+```
+
+## 8. Reproduce the component ablation
+
+The paper analyzes:
+
+- BL
+- BL + DA
+- BL + DA + MP
+- BL + DA + MS
+- BL + DA + MS + SA
+- BL + DA + MP + MS + SA
+
+Run all six configurations:
+
+```bash
+python experiments/run_ablation.py \
+  --config configs/chestxray2017.yaml \
+  --output-root outputs/ablation_chestxray2017 \
+  --device cuda
+```
+
+Collect results:
+
+```bash
+python experiments/collect_results.py outputs/ablation_chestxray2017 \
+  --output outputs/ablation_chestxray2017.csv
+```
+
+For reference, the paper reports ChestXRay2017 accuracies of 91.35, 92.89, 93.87, 93.98, 94.93, and 95.65% for these configurations, respectively.
+
+## 9. Reproduce the text-prompt analysis
+
+```bash
+python experiments/run_prompt_sweep.py \
+  --config configs/chestxray2017.yaml \
+  --output-root outputs/prompt_sweep \
+  --device cuda
+```
+
+This trains all seven non-empty combinations of the three prompt templates. The paper reports the best result when all three prompts are combined.
+
+## 10. Reproduce the scale/layer analysis
+
+The paper evaluates 1--3 scales and 1--4 Transformer layers and selects 3 scales + 3 layers.
+
+```bash
+python experiments/run_scale_layer_sweep.py \
+  --config configs/chestxray2017.yaml \
+  --output-root outputs/scale_layer_sweep \
+  --device cuda
+```
+
+The configured scale dimensions are 512, 256, and 128 when `embed_dim=512`.
+
+## 11. Reproduce the lambda analysis
+
+```bash
+python experiments/run_lambda_sweep.py \
+  --config configs/chestxray2017.yaml \
+  --output-root outputs/lambda_sweep \
+  --device cuda
+```
+
+The paper reports the best setting at `(lambda1, lambda2) = (1.0, 1.0)`.
+
+## 12. Manuscript-aligned hyperparameters
+
+The following are directly reported in the manuscript:
+
+| Item | Value |
+|---|---|
+| Backbone | pretrained ResNet50 |
+| CLIP | ViT-B/32 |
+| CLIP encoders | frozen |
+| Transformer layers | 3 |
+| Scalable adapter | 2 linear layers |
+| Number of scales | 3 |
+| `lambda1` | 1 |
+| `lambda2` | 1 |
+| `alpha_l` | 1/3 |
+| Optimizer | Adam |
+| Initial LR | 0.0002 |
+| Weight decay | 0.0001 |
+| Epochs | 60 |
+| Scheduler | cosine annealing |
+
+The paper does **not** explicitly report batch size, seed, input resolution, augmentation magnitudes, adapter hidden width, or attention-head count. Those fields are visibly marked as implementation choices in the YAML files.
+
+## 13. Important formula consistency note
+
+Two manuscript equations are not sufficient for a unique executable implementation:
+
+- Eq. (10)--(11), if normalized over prompts and then averaged literally, collapses to `1/K` for each class.
+- Eq. (22) combines two probabilities with `lambda1=lambda2=1` inside a logarithm but does not show normalization of the weighted sum.
+
+For a usable classifier, this repository defaults to class-wise softmax before prompt averaging and to normalized probability fusion. Both behaviors can be changed in YAML. See `PAPER_IMPLEMENTATION_NOTES.md` before reporting any reproduction claim.
+
+## 14. Recommended reproducibility protocol
+
+For a defensible experimental reproduction:
+
+1. Keep the official dataset split unchanged.
+2. Run at least 3 independent seeds (preferably 5).
+3. Report mean ± standard deviation for Accuracy, Precision, Recall, F1, and AUC.
+4. Save exact package versions and GPU model.
+5. Retain `resolved_config.json` for every run.
+6. Do not tune hyperparameters on the test set.
+7. Report any deviation from the paper's stated settings.
+
+Example multi-seed loop:
+
+```bash
+for seed in 1 2 3 4 5; do
+  cp configs/chestxray2017.yaml /tmp/am2ps_${seed}.yaml
+  python -c "import yaml; p='/tmp/am2ps_${seed}.yaml'; c=yaml.safe_load(open(p)); c['seed']=${seed}; yaml.safe_dump(c,open(p,'w'),sort_keys=False)"
+  python train.py --config /tmp/am2ps_${seed}.yaml --output outputs/seed_${seed} --device cuda
+done
+```
+
+## 15. GitHub publication checklist
+
+Before publishing this package to GitHub:
+
+- add the manuscript DOI once available;
+- confirm the final method name (AM2PS) and title;
+- state clearly that this is the authors' official code only if the authors have verified this reconstructed implementation;
+- replace the implementation-choice defaults if original experimental values become available;
+- run all experiments and commit only measured results, never manuscript target values as generated outputs;
+- add dataset licenses/links rather than redistributing medical images.

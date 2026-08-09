@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+message: "If you use this code, please cite the accompanying AM2PS manuscript."
+title: "AM2PS: Adaptive Multi-Prompt and Multi-Scale Feature Fusion for Pneumonia Diagnosis"
+type: software
+authors:
+  - family-names: Zheng
+    given-names: Zijun
+  - family-names: Wu
+    given-names: Heng
+  - family-names: Lv
+    given-names: Laishui
+  - family-names: Bardou
+    given-names: Dalal
+  - family-names: Wang
+    given-names: Wansong
+version: 0.1.0
+date-released: 2026-08-08
